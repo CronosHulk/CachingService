@@ -1,9 +1,8 @@
 # Caching Service
 
 FastAPI service for generating payloads and caching string transformations.
-The project is at the skeleton stage: only the health endpoint is implemented.
-PostgreSQL storage, migrations, payload endpoints, CLI, and Docker deployment
-will be added in subsequent steps.
+The service provides async payload creation and reading, backed by PostgreSQL.
+CLI and application Docker deployment will be added in subsequent steps.
 
 ## Local setup
 
@@ -57,8 +56,26 @@ The Python package lives in `app/caching_service/`:
 - `adapters/outbound/persistence/`: database implementations of storage ports.
 - `adapters/outbound/transformer/`: implementation of the string transformer.
 - `main.py`: application entry point and future dependency wiring.
-- `config.py`: placeholder for application settings.
+- `config.py`: application settings loaded from the environment and `.env`.
 
 Use cases will depend on ports, with concrete adapters supplied at the
-application entry point. `compose.yaml` and `.env.example` are placeholders
-for the PostgreSQL setup.
+application entry point. PostgreSQL runs through `compose.yaml`; connection
+examples are in `.env.example`.
+
+## Async execution
+
+API handlers, use cases, transformer ports, and storage operations use
+`async`/`await`. SQLAlchemy uses `AsyncEngine` and `AsyncSession` with psycopg 3;
+the existing `postgresql+psycopg` URLs work with the async engine. Each request
+gets one session and transaction, completed before the response is sent.
+The engine pool is disposed when the application shuts down.
+
+Alembic uses an async connection with `run_sync` for its migration API.
+Schema definitions, validation, hashing, and migration operations remain
+ordinary Python functions because they do not perform async I/O.
+
+Tests run with pytest-asyncio. Integration tests read `TEST_DATABASE_URL` from
+`.env` or the environment and require a migrated `caching_service_test` database.
+They clear the two application tables before each test and run sequentially.
+Concurrent cache misses can still invoke the transformer more than once;
+unique constraints prevent duplicate stored records.

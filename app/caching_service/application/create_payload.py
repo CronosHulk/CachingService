@@ -16,7 +16,7 @@ class CreatePayload:
         self.storage = storage
         self.transformer = transformer
 
-    def execute(
+    async def execute(
         self,
         list_1: Sequence[str],
         list_2: Sequence[str],
@@ -31,15 +31,15 @@ class CreatePayload:
         )
         request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
 
-        existing = self.storage.get_payload_by_hash(request_hash)
+        existing = await self.storage.get_payload_by_hash(request_hash)
         if existing is not None:
             return existing
 
         unique_texts = list(dict.fromkeys([*list_1, *list_2]))
-        cached = self.storage.get_transformations(unique_texts)
+        cached = await self.storage.get_transformations(unique_texts)
 
         new_transformations = {
-            text: self.transformer.transform(text)
+            text: await self.transformer.transform(text)
             for text in unique_texts
             if text not in cached
         }
@@ -51,7 +51,7 @@ class CreatePayload:
             for text in pair
         )
 
-        return self.storage.save_payload(
+        return await self.storage.save_payload(
             request_hash=request_hash,
             output=output,
             transformations=new_transformations,

@@ -1,13 +1,13 @@
-from collections.abc import Callable, Generator, Iterator
-from contextlib import AbstractContextManager, contextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
 import pytest
 from pydantic import PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import Engine, create_engine, delete
+from sqlalchemy import delete
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from caching_service.adapters.outbound.persistence.models import (
     Payload,
@@ -27,7 +27,7 @@ class IntegrationSettings(BaseSettings):
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
+async def engine() -> AsyncIterator[AsyncEngine]:
     settings = IntegrationSettings()
     if settings.test_database_url is None:
         pytest.skip("Set TEST_DATABASE_URL in .env or the environment")
@@ -36,25 +36,25 @@ def engine() -> Iterator[Engine]:
     if make_url(database_url).database != "caching_service_test":
         raise ValueError("Expected the caching_service_test database")
 
-    engine = create_engine(database_url)
+    engine = create_async_engine(database_url)
 
     try:
-        with engine.begin() as connection:
-            connection.execute(delete(Payload))
-            connection.execute(delete(TransformCache))
+        async with engine.begin() as connection:
+            await connection.execute(delete(Payload))
+            await connection.execute(delete(TransformCache))
 
         yield engine
     finally:
-        engine.dispose()
+        await engine.dispose()
 
 
 @pytest.fixture
 def storage_scope(
-    engine: Engine,
-) -> Callable[[], AbstractContextManager[PostgresStorage]]:
-    @contextmanager
-    def open_storage() -> Generator[PostgresStorage, None, None]:
-        with Session(engine) as session, session.begin():
+    engine: AsyncEngine,
+) -> Callable[[], AbstractAsyncContextManager[PostgresStorage]]:
+    @asynccontextmanager
+    async def open_storage() -> AsyncGenerator[PostgresStorage, None]:
+        async with AsyncSession(engine) as session, session.begin():
             yield PostgresStorage(session)
 
     return open_storage

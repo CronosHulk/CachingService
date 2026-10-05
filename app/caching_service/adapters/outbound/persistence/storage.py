@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from caching_service.adapters.outbound.persistence.models import (
     Payload as PayloadModel,
@@ -14,11 +14,11 @@ from caching_service.domain.payload import Payload
 
 
 class PostgresStorage:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    def get_payload_by_hash(self, request_hash: str) -> Payload | None:
-        row = self.session.scalar(
+    async def get_payload_by_hash(self, request_hash: str) -> Payload | None:
+        row = await self.session.scalar(
             select(PayloadModel).where(PayloadModel.request_hash == request_hash)
         )
         if row is None:
@@ -26,25 +26,25 @@ class PostgresStorage:
 
         return Payload(id=row.id, output=row.output)
 
-    def get_payload_by_id(self, payload_id: UUID) -> Payload | None:
-        row = self.session.get(PayloadModel, payload_id)
+    async def get_payload_by_id(self, payload_id: UUID) -> Payload | None:
+        row = await self.session.get(PayloadModel, payload_id)
         if row is None:
             return None
 
         return Payload(id=row.id, output=row.output)
 
-    def get_transformations(self, texts: Sequence[str]) -> dict[str, str]:
+    async def get_transformations(self, texts: Sequence[str]) -> dict[str, str]:
         if not texts:
             return {}
 
         hashes = {sha256(text.encode("utf-8")).hexdigest() for text in texts}
 
-        rows = self.session.scalars(
+        rows = await self.session.scalars(
             select(TransformCache).where(TransformCache.input_hash.in_(hashes))
         )
         return {row.input_text: row.output_text for row in rows}
 
-    def save_payload(
+    async def save_payload(
         self,
         request_hash: str,
         output: str,
@@ -61,7 +61,7 @@ class PostgresStorage:
             ]
             rows.sort(key=lambda row: row["input_hash"])
 
-            self.session.execute(
+            await self.session.execute(
                 insert(TransformCache)
                 .values(rows)
                 .on_conflict_do_nothing(
@@ -69,7 +69,7 @@ class PostgresStorage:
                 )
             )
 
-        self.session.execute(
+        await self.session.execute(
             insert(PayloadModel)
             .values(
                 id=uuid4(),
@@ -81,7 +81,7 @@ class PostgresStorage:
             )
         )
 
-        payload = self.get_payload_by_hash(request_hash)
+        payload = await self.get_payload_by_hash(request_hash)
         if payload is None:
             raise RuntimeError("Payload not found after insert")
 

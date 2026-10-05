@@ -12,23 +12,23 @@ class MemoryStorage:
         self.payloads: dict[str, Payload] = {}
         self.transformations: dict[str, str] = {}
 
-    def get_payload_by_hash(self, request_hash: str) -> Payload | None:
+    async def get_payload_by_hash(self, request_hash: str) -> Payload | None:
         return self.payloads.get(request_hash)
 
-    def get_payload_by_id(self, payload_id: UUID) -> Payload | None:
+    async def get_payload_by_id(self, payload_id: UUID) -> Payload | None:
         return next(
             (payload for payload in self.payloads.values() if payload.id == payload_id),
             None,
         )
 
-    def get_transformations(self, texts: Sequence[str]) -> dict[str, str]:
+    async def get_transformations(self, texts: Sequence[str]) -> dict[str, str]:
         return {
             text: self.transformations[text]
             for text in texts
             if text in self.transformations
         }
 
-    def save_payload(
+    async def save_payload(
         self,
         request_hash: str,
         output: str,
@@ -48,43 +48,43 @@ class CountingTransformer:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def transform(self, text: str) -> str:
+    async def transform(self, text: str) -> str:
         self.calls.append(text)
         return text.upper()
 
 
-def test_interleaves_transformed_strings() -> None:
+async def test_interleaves_transformed_strings() -> None:
     storage = MemoryStorage()
     transformer = CountingTransformer()
     service = CreatePayload(storage, transformer)
 
-    payload = service.execute(["hello", "world"], ["cat", "dog"])
+    payload = await service.execute(["hello", "world"], ["cat", "dog"])
 
     assert payload.output == "HELLO, CAT, WORLD, DOG"
     assert len(transformer.calls) == 4
-    assert storage.get_payload_by_id(payload.id) == payload
+    assert await storage.get_payload_by_id(payload.id) == payload
 
 
-def test_transforms_duplicate_string_once() -> None:
+async def test_transforms_duplicate_string_once() -> None:
     storage = MemoryStorage()
     transformer = CountingTransformer()
     service = CreatePayload(storage, transformer)
 
-    payload = service.execute(["hello", "hello"], ["hello", "hello"])
+    payload = await service.execute(["hello", "hello"], ["hello", "hello"])
 
     assert payload.output == "HELLO, HELLO, HELLO, HELLO"
     assert transformer.calls == ["hello"]
 
 
-def test_repeated_request_reuses_payload_id() -> None:
+async def test_repeated_request_reuses_payload_id() -> None:
     storage = MemoryStorage()
     transformer = CountingTransformer()
     service = CreatePayload(storage, transformer)
 
-    first = service.execute(["hello"], ["cat"])
+    first = await service.execute(["hello"], ["cat"])
     calls_after_first = transformer.calls.copy()
 
-    second = service.execute(["hello"], ["cat"])
+    second = await service.execute(["hello"], ["cat"])
 
     assert second.id == first.id
     assert second.output == first.output
@@ -92,28 +92,28 @@ def test_repeated_request_reuses_payload_id() -> None:
     assert len(storage.payloads) == 1
 
 
-def test_new_request_reuses_cached_transformations() -> None:
+async def test_new_request_reuses_cached_transformations() -> None:
     storage = MemoryStorage()
     transformer = CountingTransformer()
     service = CreatePayload(storage, transformer)
 
-    first = service.execute(["hello"], ["cat"])
+    first = await service.execute(["hello"], ["cat"])
     transformer.calls.clear()
 
-    second = service.execute(["cat"], ["dog"])
+    second = await service.execute(["cat"], ["dog"])
 
     assert second.id != first.id
     assert second.output == "CAT, DOG"
     assert transformer.calls == ["dog"]
 
 
-def test_rejects_different_list_lengths() -> None:
+async def test_rejects_different_list_lengths() -> None:
     storage = MemoryStorage()
     transformer = CountingTransformer()
     service = CreatePayload(storage, transformer)
 
     with pytest.raises(ValueError, match="same length"):
-        service.execute(["hello"], [])
+        await service.execute(["hello"], [])
 
     assert transformer.calls == []
     assert storage.payloads == {}
