@@ -55,3 +55,24 @@ async def test_unknown_payload_returns_404(client: AsyncClient) -> None:
 async def test_invalid_payload_returns_422(client: AsyncClient, body: dict) -> None:
     response = await client.post("/payload", json=body)
     assert response.status_code == 422
+
+
+async def test_cli_against_api_and_postgres(client: AsyncClient) -> None:
+    from caching_service.adapters.inbound.cli.main import (
+        CliSettings,
+        load_input,
+        run_requests,
+    )
+
+    settings = CliSettings(
+        _cli_parse_args=[
+            "-H",
+            "http://test",
+            "-r",
+            "2",
+            "-j",
+            '{"list_1":["hello"],"list_2":["cat"]}',
+        ]
+    )
+    results = await run_requests(settings, load_input(settings), client)
+    assert results == ['{"output":"HELLO, CAT"}'] * 2

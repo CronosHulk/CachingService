@@ -2,7 +2,7 @@
 
 FastAPI service for generating payloads and caching string transformations.
 The service provides async payload creation and reading, backed by PostgreSQL.
-CLI and application Docker deployment will be added in subsequent steps.
+An async CLI is included; application Docker deployment is the next step.
 
 ## Local setup
 
@@ -79,3 +79,35 @@ Tests run with pytest-asyncio. Integration tests read `TEST_DATABASE_URL` from
 They clear the two application tables before each test and run sequentially.
 Concurrent cache misses can still invoke the transformer more than once;
 unique constraints prevent duplicate stored records.
+
+## CLI
+
+Installing the project registers the `cache-cli` command. Start the API first.
+Arguments are parsed and validated through Pydantic Settings:
+https://pydantic.dev/docs/validation/2.12/concepts/pydantic_settings/
+
+```bash
+cache-cli --help
+cache-cli -H http://127.0.0.1:8000 -r 2 \
+  -j '{"list_1":["hello"],"list_2":["cat"]}'
+cache-cli -i request.json -o response.jsonl
+cat request.json | cache-cli -i - -o -
+```
+
+Provide exactly one of `--input` (`-i`) and `--json` (`-j`). `--output` (`-o`)
+defaults to stdout; `-` selects stdin or stdout. Repeat must be a positive
+integer. Each iteration sends POST followed by GET and produces one JSON line:
+
+```json
+{"output":"HELLO, CAT"}
+```
+
+The input is loaded once and reused for every iteration. Results are written
+only after all iterations succeed. An output file is overwritten. Validation,
+HTTP, and file errors go to stderr with exit code 1. Help exits with code 0.
+The specification assigns `-h` to both host and help; this implementation uses
+`-H` for host and reserves `-h` for help. Long option names match the task.
+
+CLI HTTP operations are async; file and standard-stream I/O run in a worker
+thread. Run CLI tests with `python -m pytest -q tests/test_cli.py`; the API
+integration suite also exercises CLI requests against the test database.
