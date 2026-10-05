@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from caching_service.adapters.inbound.api.dependencies import get_engine
+from caching_service.adapters.inbound.api.middleware import ApiHeadersMiddleware
 from caching_service.adapters.inbound.api.routes import router
 
 
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="Caching Service", lifespan=lifespan)
+app.add_middleware(ApiHeadersMiddleware)
 app.include_router(router)
 
 

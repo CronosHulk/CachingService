@@ -82,6 +82,8 @@ unique constraints prevent duplicate stored records.
 
 ## CLI
 
+Ready-to-run input files and commands are in [examples/README.md](examples/README.md).
+
 Installing the project registers the `cache-cli` command. Start the API first.
 Arguments are parsed and validated through Pydantic Settings:
 https://pydantic.dev/docs/validation/2.12/concepts/pydantic_settings/
@@ -146,3 +148,11 @@ After changing dependencies, rebuild with `docker compose up -d --build api`.
 The default Compose configuration is intended for development; the standalone
 Docker image runs without mounts or reload.
 `docker compose down` stops the services and retains the PostgreSQL volume.
+
+## API response headers
+
+ASGI middleware adds `X-Request-ID`, `Cache-Control: no-store`, and
+`X-Content-Type-Options: nosniff` to responses, including handled 404 and 422
+errors. A valid UUID supplied as `X-Request-ID` is preserved; otherwise a new
+UUID is generated. Handlers can access it as `request.state.request_id`.
+`Content-Type` is set by FastAPI according to the response format.
