@@ -2,7 +2,7 @@
 
 FastAPI service for generating payloads and caching string transformations.
 The service provides async payload creation and reading, backed by PostgreSQL.
-An async CLI is included; application Docker deployment is the next step.
+An async CLI and Docker Compose deployment are included.
 
 ## Local setup
 
@@ -111,3 +111,38 @@ The specification assigns `-h` to both host and help; this implementation uses
 CLI HTTP operations are async; file and standard-stream I/O run in a worker
 thread. Run CLI tests with `python -m pytest -q tests/test_cli.py`; the API
 integration suite also exercises CLI requests against the test database.
+
+## Docker API
+
+PostgreSQL and the API run in separate containers on the Compose network.
+Create `.env` from `.env.example` if you have not configured it yet, then run:
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f api
+```
+
+The API waits for PostgreSQL's healthcheck, applies Alembic migrations, and
+starts Uvicorn. A failed migration prevents API startup. The API runs as an
+unprivileged user; local `.env` files are excluded from the build context.
+This startup migration approach assumes one API container.
+
+Inside Docker the database address is `postgres:5432`. Local tools continue
+using `localhost:5433`. The API is published on `127.0.0.1:8000` by default.
+If port 8000 is occupied, use `API_PORT=8001 docker compose up -d api` and
+point the CLI at port 8001.
+
+```bash
+cache-cli -H http://127.0.0.1:8000 -r 2 \
+  -j '{"list_1":["hello"],"list_2":["cat"]}'
+```
+
+Compose mounts `app/`, `migrations/`, and `alembic.ini` from the host read-only.
+`PYTHONPATH=/service/app` makes Python import the mounted code instead of the
+installed copy. Uvicorn reloads automatically after Python code changes.
+After adding migrations, run `docker compose exec api alembic upgrade head`.
+After changing dependencies, rebuild with `docker compose up -d --build api`.
+The default Compose configuration is intended for development; the standalone
+Docker image runs without mounts or reload.
+`docker compose down` stops the services and retains the PostgreSQL volume.
